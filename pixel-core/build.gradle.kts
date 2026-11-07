@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
@@ -5,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.pixellab.core"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26
@@ -21,10 +23,14 @@ android {
         }
     }
 
+    // NDK r30（30.0.16248370）：2026-11 工具链升级钉版 —— GitHub Actions
+    // ubuntu-24.04 runner 预装该版本，CI 免下载；CMake 3.31.6 同理。
+    ndkVersion = "30.0.16248370"
+
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
+            version = "3.31.6"
         }
     }
 
@@ -32,8 +38,13 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
+}
+
+// Kotlin 2.3 时代 kotlinOptions DSL 已废弃，迁移到 compilerOptions DSL
+// （宿主 Android-Guru-Agent 同款写法）。字节码目标钉 17 与宿主一致。
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 

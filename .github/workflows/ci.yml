@@ -6,19 +6,24 @@ name: CI
 #   • jvm-compile  — kotlinc compiles pixel-core main + test sources against
 #                    pure-JVM dependencies (no Android SDK needed). Fast
 #                    feedback on type errors, API misuse, visibility issues.
-#   • jvm-test     — runs the pixel-core unit-test suite through the JUnit
-#                    Platform console launcher (no Gradle required).
+#   • jvm-test     — runs the pixel-core + pixel-mcp unit-test suites through
+#                    the JUnit Platform console launcher (no Gradle required).
 #   • gradle-build — the real thing: ./gradlew assembles every module with
-#                    AGP 8.7.3, the Android SDK and the NDK CMake toolchain,
-#                    then runs :pixel-core:testDebugUnitTest and uploads the
-#                    sample APK as an artifact.
+#                    AGP 8.13.2, the Android SDK and the NDK r30 / CMake 3.31.6
+#                    toolchain, then runs the per-module unit tests and uploads
+#                    the sample APK as an artifact.
 #   • native-syntax— g++ -Wall -Wextra syntax gate over every C++ translation
 #                    unit with the JDK JNI headers on the include path.
+#
+# 2026-11 toolchain upgrade: JDK 17 → 21 (bytecode stays 17), kotlinc
+# 2.0.21 → 2.3.21, coroutines 1.9.0 → 1.10.2, Gradle 8.10.2 → 8.14.6 (now
+# resolved from the committed wrapper — single source of truth — with Gradle
+# dependency caching and wrapper validation via setup-gradle v4).
 #
 # The workflow file previously shipped in this repository had a corrupted
 # trigger (`branches: ain]`) and three broken jobs (Gradle 8.1 parsed from an
 # unquoted `8.10`, a missing JNI include path, and a doubled kotlinc path).
-# All PRs merged before this fix show red checks; this rewrite is the fix.
+# All PRs merged before that fix show red checks.
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -43,11 +48,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Cache kotlinc and compile jars
         uses: actions/cache@v4
@@ -55,15 +60,15 @@ jobs:
           path: |
             ~/pl-kotlinc
             /tmp/pl-libs
-          key: kotlinc-2.0.21-libs-v2
+          key: kotlinc-2.3.21-libs-v1
 
-      - name: Install Kotlin compiler 2.0.21
+      - name: Install Kotlin compiler 2.3.21
         run: |
           # The official zip's top-level directory name has varied across
           # releases (kotlinc/ vs kotlinc-dist/); extract, locate the
           # binary, stage it under one fixed path.
           if [ ! -x "$HOME/pl-kotlinc/bin/kotlinc" ]; then
-            curl -sL -f https://github.com/JetBrains/kotlin/releases/download/v2.0.21/kotlin-compiler-2.0.21.zip -o /tmp/kotlin.zip
+            curl -sL -f https://github.com/JetBrains/kotlin/releases/download/v2.3.21/kotlin-compiler-2.3.21.zip -o /tmp/kotlin.zip
             rm -rf /tmp/kotlin-extract && mkdir -p /tmp/kotlin-extract
             unzip -q /tmp/kotlin.zip -d /tmp/kotlin-extract
             BIN=$(find /tmp/kotlin-extract -type f -name kotlinc | head -n 1)
@@ -77,8 +82,8 @@ jobs:
         run: |
           mkdir -p /tmp/pl-libs
           fetch() { [ -f "/tmp/pl-libs/$2" ] || curl -sL -f -o "/tmp/pl-libs/$2" "$1"; echo "$2 ok"; }
-          fetch https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.9.0/kotlinx-coroutines-core-jvm-1.9.0.jar kotlinx-coroutines-core-jvm-1.9.0.jar
-          fetch https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-test/2.0.21/kotlin-test-2.0.21.jar kotlin-test-2.0.21.jar
+          fetch https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.10.2/kotlinx-coroutines-core-jvm-1.10.2.jar kotlinx-coroutines-core-jvm-1.10.2.jar
+          fetch https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-test/2.3.21/kotlin-test-2.3.21.jar kotlin-test-2.3.21.jar
           fetch https://repo1.maven.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar junit-4.13.2.jar
           fetch https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar hamcrest-core-1.3.jar
 
@@ -125,7 +130,7 @@ jobs:
 
       - name: Compile pixel-core main sources
         run: |
-          CP="/tmp/pl-libs/kotlinx-coroutines-core-jvm-1.9.0.jar"
+          CP="/tmp/pl-libs/kotlinx-coroutines-core-jvm-1.10.2.jar"
           "$HOME/pl-kotlinc/bin/kotlinc" -cp "$CP" -jvm-target 17 -d /tmp/out-main \
             $(find pixel-core/src/main/kotlin -name '*.kt' | sort) \
             $(find /tmp/pl-stubs -name '*.kt' | sort)
@@ -135,7 +140,7 @@ jobs:
           # The MCP wire layer is pure JVM (coroutines only) — compile it
           # against the freshly built pixel-core classes so router/transport
           # regressions surface in the fast gate, not only in Gradle.
-          CP="/tmp/out-main:/tmp/pl-libs/kotlinx-coroutines-core-jvm-1.9.0.jar"
+          CP="/tmp/out-main:/tmp/pl-libs/kotlinx-coroutines-core-jvm-1.10.2.jar"
           "$HOME/pl-kotlinc/bin/kotlinc" -cp "$CP" -jvm-target 17 -d /tmp/out-mcp \
             $(find pixel-mcp/src/main/kotlin -name '*.kt' | sort)
 
@@ -146,7 +151,7 @@ jobs:
           # loopback sockets). Compile it against core+mcp classes so the
           # jvm-test gate below can run it.
           if [ -d pixel-mcp/src/test/kotlin ] && find pixel-mcp/src/test/kotlin -name '*.kt' | grep -q .; then
-            CP="/tmp/out-main:/tmp/out-mcp:/tmp/pl-libs/kotlinx-coroutines-core-jvm-1.9.0.jar:/tmp/pl-libs/kotlin-test-2.0.21.jar:/tmp/pl-libs/junit-4.13.2.jar"
+            CP="/tmp/out-main:/tmp/out-mcp:/tmp/pl-libs/kotlinx-coroutines-core-jvm-1.10.2.jar:/tmp/pl-libs/kotlin-test-2.3.21.jar:/tmp/pl-libs/junit-4.13.2.jar"
             "$HOME/pl-kotlinc/bin/kotlinc" -cp "$CP" -jvm-target 17 -d /tmp/out-mcp-test \
               $(find pixel-mcp/src/test/kotlin -name '*.kt' | sort)
           else
@@ -156,7 +161,7 @@ jobs:
 
       - name: Compile pixel-core test sources
         run: |
-          CP="/tmp/out-main:/tmp/pl-libs/kotlinx-coroutines-core-jvm-1.9.0.jar:/tmp/pl-libs/kotlin-test-2.0.21.jar:/tmp/pl-libs/junit-4.13.2.jar"
+          CP="/tmp/out-main:/tmp/pl-libs/kotlinx-coroutines-core-jvm-1.10.2.jar:/tmp/pl-libs/kotlin-test-2.3.21.jar:/tmp/pl-libs/junit-4.13.2.jar"
           if [ -d pixel-core/src/test/kotlin ] && find pixel-core/src/test/kotlin -name '*.kt' | grep -q .; then
             "$HOME/pl-kotlinc/bin/kotlinc" -cp "$CP" -jvm-target 17 -d /tmp/out-test \
               $(find pixel-core/src/test/kotlin -name '*.kt' | sort)
@@ -190,11 +195,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Download compiled classes
         uses: actions/download-artifact@v4
@@ -214,12 +219,12 @@ jobs:
           path: |
             ~/pl-kotlinc
             /tmp/pl-libs
-          key: kotlinc-2.0.21-testlibs-v2
+          key: kotlinc-2.3.21-testlibs-v1
 
       - name: Install Kotlin compiler + fetch runner libraries
         run: |
           if [ ! -x "$HOME/pl-kotlinc/bin/kotlinc" ]; then
-            curl -sL -f https://github.com/JetBrains/kotlin/releases/download/v2.0.21/kotlin-compiler-2.0.21.zip -o /tmp/kotlin.zip
+            curl -sL -f https://github.com/JetBrains/kotlin/releases/download/v2.3.21/kotlin-compiler-2.3.21.zip -o /tmp/kotlin.zip
             rm -rf /tmp/kotlin-extract && mkdir -p /tmp/kotlin-extract
             unzip -q /tmp/kotlin.zip -d /tmp/kotlin-extract
             BIN=$(find /tmp/kotlin-extract -type f -name kotlinc | head -n 1)
@@ -229,17 +234,17 @@ jobs:
           fi
           mkdir -p /tmp/pl-libs
           fetch() { [ -f "/tmp/pl-libs/$2" ] || curl -sL -f -o "/tmp/pl-libs/$2" "$1"; }
-          fetch https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.9.0/kotlinx-coroutines-core-jvm-1.9.0.jar kotlinx-coroutines-core-jvm-1.9.0.jar
-          fetch https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-test/2.0.21/kotlin-test-2.0.21.jar kotlin-test-2.0.21.jar
+          fetch https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.10.2/kotlinx-coroutines-core-jvm-1.10.2.jar kotlinx-coroutines-core-jvm-1.10.2.jar
+          fetch https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-test/2.3.21/kotlin-test-2.3.21.jar kotlin-test-2.3.21.jar
           fetch https://repo1.maven.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar junit-4.13.2.jar
           fetch https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar hamcrest-core-1.3.jar
           fetch https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.10.3/junit-platform-console-standalone-1.10.3.jar junit-platform-console-standalone-1.10.3.jar
-          fetch https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/2.0.21/kotlin-stdlib-2.0.21.jar kotlin-stdlib-2.0.21.jar
+          fetch https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/2.3.21/kotlin-stdlib-2.3.21.jar kotlin-stdlib-2.3.21.jar
 
       - name: Compile test sources against downloaded classes
         run: |
           if find pixel-core/src/test/kotlin -name '*.kt' 2>/dev/null | grep -q .; then
-            CP="/tmp/out-main:/tmp/pl-libs/kotlinx-coroutines-core-jvm-1.9.0.jar:/tmp/pl-libs/kotlin-test-2.0.21.jar:/tmp/pl-libs/junit-4.13.2.jar"
+            CP="/tmp/out-main:/tmp/pl-libs/kotlinx-coroutines-core-jvm-1.10.2.jar:/tmp/pl-libs/kotlin-test-2.3.21.jar:/tmp/pl-libs/junit-4.13.2.jar"
             "$HOME/pl-kotlinc/bin/kotlinc" -cp "$CP" -jvm-target 17 -d /tmp/out-test \
               $(find pixel-core/src/test/kotlin -name '*.kt' | sort)
           else
@@ -249,7 +254,7 @@ jobs:
 
       - name: Run tests (JUnit Platform console)
         run: |
-          CP="/tmp/out-main:/tmp/out-test:/tmp/out-mcp:/tmp/out-mcp-test:/tmp/pl-libs/kotlinx-coroutines-core-jvm-1.9.0.jar:/tmp/pl-libs/kotlin-test-2.0.21.jar:/tmp/pl-libs/junit-4.13.2.jar:/tmp/pl-libs/hamcrest-core-1.3.jar:/tmp/pl-libs/kotlin-stdlib-2.0.21.jar"
+          CP="/tmp/out-main:/tmp/out-test:/tmp/out-mcp:/tmp/out-mcp-test:/tmp/pl-libs/kotlinx-coroutines-core-jvm-1.10.2.jar:/tmp/pl-libs/kotlin-test-2.3.21.jar:/tmp/pl-libs/junit-4.13.2.jar:/tmp/pl-libs/hamcrest-core-1.3.jar:/tmp/pl-libs/kotlin-stdlib-2.3.21.jar"
           CLASSES=$(find /tmp/out-test /tmp/out-mcp-test -name '*Kt.class' -o -name '*Test.class' | wc -l)
           if [ "$CLASSES" -gt 0 ]; then
             java -jar /tmp/pl-libs/junit-platform-console-standalone-1.10.3.jar \
@@ -268,18 +273,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
-      - name: Set up Gradle (wrapper, quoted — 8.10 unquoted parses as 8.1)
+      # No pinned gradle-version: the committed wrapper (8.14.6) is the
+      # single source of truth — setup-gradle v4 adds dependency caching
+      # and validates the wrapper binaries against official Gradle releases
+      # (supply-chain gate) on top.
+      - name: Set up Gradle (wrapper mode + cache + wrapper validation)
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.10.2'
+          validate-wrappers: true
 
-      - name: Assemble every module (native arm64-v8a + x86_64)
+      - name: Assemble every module (native arm64-v8a + x86_64, NDK r30)
         run: ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Run pixel-core, pixel-mcp and pixel-ui-compose unit tests
@@ -309,11 +318,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 17 (provides jni.h)
+      - name: Set up JDK 21 (provides jni.h)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: g++ syntax + warnings gate with JNI and log stubs
         run: |

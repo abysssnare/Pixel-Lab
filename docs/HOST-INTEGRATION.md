@@ -1,17 +1,20 @@
 # Host Integration Guide — Android-Guru-Agent 接入
 
-Pixel Lab 是能力库，宿主是 [Android-Guru-Agent](https://github.com/AceGuru-mjh/Android-Guru-Agent)（Kotlin 2.0.21 / AGP 8.7.3 / 13 Gradle 模块 / Hilt DI / 单 Activity Compose）。本指南给出三条接入路径与硬约束。
+Pixel Lab 是能力库，宿主是 [Android-Guru-Agent](https://github.com/Ultra-Guru/Android-Guru-Agent)（Kotlin 2.3.21 / AGP 8.13.2 / Gradle 8.14 / 13 Gradle 模块 / Hilt DI / 单 Activity Compose）。本指南给出三条接入路径与硬约束。
 
 ## 版本对齐（硬约束）
 
+2026-11 工具链升级后与宿主当前栈精确对齐：
+
 | 项 | 宿主 | Pixel Lab | 兼容性 |
 |:---|:---|:---|:---|
-| Kotlin | 2.0.21 | 2.0.21 | ✅ 完全一致 |
-| compileSdk | 35 | 35 | ✅ |
+| Kotlin | 2.3.21 | 2.3.21 | ✅ 完全一致 |
+| compileSdk | 36 | 36 | ✅ |
 | minSdk | 26 | 26 | ✅ |
-| JVM target | 17 | 17 | ✅ |
-| Compose BOM | 2024.12.01 | 2024.12.01（compileOnly 语义，宿主侧提供） | ✅ |
-| NDK/CMake | 27 / 3.22.1 / C++17 / c++_shared | 相同 | ✅ |
+| JVM target | 17 | 17（CI 于 JDK 21 上编译，字节码仍 17） | ✅ |
+| Compose BOM | 2026.02.00 | 2026.02.00（compileOnly 语义，宿主侧提供） | ✅ |
+| coroutines | 1.10.2 | 1.10.2（pixel-core 以 api() 暴露） | ✅ |
+| NDK/CMake | 宿主默认 | r30 / 3.31.6 / C++17 / c++_shared | ✅（.so 预编译随 AAR 分发，libc++_shared 向后兼容，宿主无需同版 NDK） |
 | ABI | arm64-v8a, armeabi-v7a, x86_64 | arm64-v8a, x86_64（库侧子集，宿主 abiFilters 取并集即可） | ✅ |
 | 混淆 | 不启用 | consumer-rules 保留 JNI 类 | ✅ |
 

@@ -2,7 +2,7 @@
 
 **像素能力库（pixel capability library）** — 可被宿主 Agent 应用引入的像素艺术引擎。Kotlin Multiplatform-style API + 可选 C++/NDK 热路径 + MCP 服务器封装。
 
-> 为 [Android-Guru-Agent](https://github.com/AceGuru-mjh/Android-Guru-Agent) 而生，但零宿主耦合：纯 JVM 核心、不可变数据模型、无全局状态。
+> 为 [Android-Guru-Agent](https://github.com/Ultra-Guru/Android-Guru-Agent) 而生，但零宿主耦合：纯 JVM 核心、不可变数据模型、无全局状态。
 
 ## 模块
 
@@ -54,11 +54,13 @@ ABI：`arm64-v8a` + `x86_64`；C++17；`-Wall -Wextra` 干净。桌面端已通�
 
 ## 技术栈
 
-Kotlin 2.0.21 · AGP 8.7.3 · compileSdk 35 · minSdk 26 · JDK 17 · Compose BOM 2024.12.01 · NDK 27 / CMake 3.22.1 · kotlinx-coroutines 1.9.0
+Kotlin 2.3.21 · AGP 8.13.2 · Gradle 8.14.6 · compileSdk 36 · minSdk 26 · JDK 21（字节码 17）· Compose BOM 2026.02.00 · NDK r30 / CMake 3.31.6 · kotlinx-coroutines 1.10.2
+
+工具链与宿主 Android-Guru-Agent 当前栈精确对齐（Kotlin/AGP/BOM/coroutines 同版本，compileSdk 同 36），Kotlin 元数据与 Compose 生态零冲突；不追 Kotlin 2.4/AGP 9 线（会迫使宿主同步大版本迁移）。
 
 ## 验证状态
 
-- 全模块 kotlinc 2.0.21 编译 0 error（CI 含 pixel-mcp JVM 门禁）
+- 全模块 kotlinc 2.3.21 编译 0 error（CI 含 pixel-mcp JVM 门禁；升级前本地预验证 432/432 测试全绿）
 - C++ 全文件 g++ `-Wall -Wextra` 语法干净 + ASan/UBSan 行为冒烟全绿（量化 3 算法确定性/抖动 7 核/洪泛/合成/LZW 回环/GIF 结构）
 - GIF/PNG/APNG 编码经 JDK ImageIO / 独立解码器像素级验证
 - MCP 服务器真实端口冒烟：initialize → tools/list → tools/call → SSE 事件流 + **WebSocket（RFC 6455 握手/掩码/分片/ping/close 1002 活体测试）**
@@ -99,7 +101,9 @@ Kotlin 2.0.21 · AGP 8.7.3 · compileSdk 35 · minSdk 26 · JDK 17 · Compose BO
 | PR #54 | **引擎正确性**：JNI 输入缓冲别名污染（mode-0 回写改写调用方不可变帧数组）、removeLayer 单趟构造（含内容图层必抛 IAE）、isModified 状态锚、checkpoint 双锚（分叉/驱逐诚实失败）、slot 快照版本化、载入边界清历史、撤销字节预算、并发安全 | +753 行 |
 | PR #55 | **IO 解码器加固**：统一导入预算（边 16384/帧 16.7M/总量 33.5M 像素）封死 PNG/GIF/BMP/QOI/Aseprite 全部「小文件→数 GB 分配」路径 + Long 域算术 + 链式 cel 深度上限 + V4/V5 截断守卫 | +367 行 |
 | PR #56 | **传输层加固**：Bearer token 准入（401/415/411——封死 loopback 共享与 text/plain CSRF）、8MB 增量请求体、JSON 200K 节点预算、SSE 有界队列写（慢客户端断开而非挂死服务器）、专用 accept 线程 + 128 连接上限、WS 握手期上限、RFC 9112 严格化（行内 CR 走私/trailer 上限/请求行校验） | +621 行 |
-| **合计** | | **59,500+ 行**（Kotlin 57,400+ + C++ 2,132+），**183 个 MCP 工具**，**409 项单测**（CI 含 Gradle+NDK 全量构建、kotlinc JVM 门、C++ -Wall -Wextra 语法门、结构质量门） |
+| PR #67 | 快捷键焦点根/IME insets/每文档面板状态/画廊导出路径/无障碍与 IO 卫生 | — |
+| **2026-11** | **工具链升级**：Kotlin 2.0.21→2.3.21、AGP 8.7.3→8.13.2、Gradle 8.10.2→8.14.6（wrapper 单一事实源）、Compose BOM 2024.12.01→2026.02.00、compileSdk/targetSdk 35→36、coroutines 1.9.0→1.10.2、JDK 17→21、NDK r27→r30、CMake 3.22.1→3.31.6；kotlinOptions→compilerOptions DSL；移除未使用的 serialization/ktor/mcp-sdk/slf4j 目录 pin；与宿主 Android-Guru-Agent 栈精确对齐；CI 增 wrapper 校验 | — |
+| **合计** | | **59,500+ 行**（Kotlin 57,400+ + C++ 2,132+），**183 个 MCP 工具**，**432 项单测**（CI 含 Gradle+NDK 全量构建、kotlinc JVM 门、C++ -Wall -Wextra 语法门、结构质量门） |
 
 任务看板：https://github.com/users/AceGuru-mjh/projects/5
 

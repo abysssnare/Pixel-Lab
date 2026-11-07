@@ -1,21 +1,24 @@
 [versions]
-agp = "8.7.3"
-kotlin = "2.0.21"
-coroutines = "1.9.0"
-serialization = "1.7.3"
-composeBom = "2024.12.01"
+# ── 2026-11 工具链升级（与宿主 Ultra-Guru/Android-Guru-Agent 对齐）──────────────
+# Kotlin 2.3.21：2.3.x 稳定线最新 patch，与宿主完全一致。不追 2.4.x —— 库的
+# Kotlin 元数据版本必须 ≤ 宿主编译器版本（2.3.21 宿主消费 2.4 元数据会直接报
+# "incompatible metadata version"），且宿主因 backdrop 生态钉在 2.3 线。
+# AGP 8.13.2：AGP 8.x 线最新稳定版，与宿主一致（AGP 9 线宿主未采用）。
+# Compose BOM 2026.02.00 = Compose 1.10.3 / material3 1.4.0：Kotlin 2.3 生态
+# 的 androidx Compose 天花板（更新 BOM 会引入 kotlin-stdlib 2.4 依赖）。
+# coroutines 1.10.2：pixel-core 以 api() 暴露给宿主，钉宿主同版本零冲突。
+agp = "8.13.2"
+kotlin = "2.3.21"
+coroutines = "1.10.2"
+composeBom = "2026.02.00"
 activityCompose = "1.9.3"
 coreKtx = "1.15.0"
 lifecycle = "2.8.7"
-mcpSdk = "0.5.0"
-ktor = "3.0.3"
-slf4j = "2.0.16"
 junit = "4.13.2"
 
 [libraries]
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
-kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
@@ -24,13 +27,9 @@ compose-ui = { group = "androidx.compose.ui", name = "ui" }
 compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+# material-icons 官方已停止演进（1.7.8 为终版，BOM 2026.02.00 仍映射 1.7.8，
+# 解析结果不变）；长期迁移 material-symbols 待后续大版本时评估。
 compose-material-icons = { group = "androidx.compose.material", name = "material-icons-extended", version = "1.7.8" }
-mcp-sdk = { group = "io.modelcontextprotocol.sdk", name = "mcp", version.ref = "mcpSdk" }
-ktor-server-core = { group = "io.ktor", name = "ktor-server-core", version.ref = "ktor" }
-ktor-server-sse = { group = "io.ktor", name = "ktor-server-sse", version.ref = "ktor" }
-ktor-server-cio = { group = "io.ktor", name = "ktor-server-cio", version.ref = "ktor" }
-ktor-server-websockets = { group = "io.ktor", name = "ktor-server-websockets", version.ref = "ktor" }
-slf4j-api = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.ref = "kotlin" }
 
@@ -39,5 +38,4 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
-kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
