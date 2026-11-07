@@ -2,8 +2,8 @@
 
 Single source of truth for module signatures during base construction.
 Files under `model/`, `palette/`, root config files are **frozen** (written by
-the coordinator). Agents implement their section verbatim. Kotlin 2.0.21,
-JDK 17, 4-space indent, KDoc on all public APIs, no TODOs, no test code in
+the coordinator). Agents implement their section verbatim. Kotlin 2.3.21,
+JDK 21 (bytecode 17), 4-space indent, KDoc on all public APIs, no TODOs, no test code in
 repo, no git operations, do not modify any file outside your task list.
 
 Package roots: `com.pixellab.core` (pixel-core), `com.pixellab.ui`
