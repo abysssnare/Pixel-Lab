@@ -36,12 +36,15 @@ import com.pixellab.core.model.Palette
 import com.pixellab.core.model.PixelFrame
 import com.pixellab.core.model.SpriteFactory
 import com.pixellab.core.model.SpriteProject
+import com.pixellab.core.transform.EdgeSmoothing
 import com.pixellab.core.transform.EpxScale
 import com.pixellab.core.transform.Resample
 import com.pixellab.core.transform.RotateBoundsMode
 import com.pixellab.core.transform.RotSprite
 import com.pixellab.core.transform.Scale2x
+import com.pixellab.core.transform.UpscaleFilter
 import com.pixellab.core.transform.XbrScale
+import com.pixellab.core.transform.XbrzScale
 import com.pixellab.core.vector.MarchingSquares
 import com.pixellab.core.vector.SvgExporter
 import com.pixellab.mcp.json.JsonArray
@@ -748,6 +751,39 @@ class McpToolRegistryV4(private val lab: PixelLab = PixelLab.create()) {
             val session = sessionOf(params, store)
             val cel = requireActiveCel(session.project)
             commitNewProject(params, store, "xbr2x", XbrScale.xbr2x(cel), paletteOf(session.project))
+        }
+
+        add("frame_xbrz", "Upscales the active cel 4x or 6x with xBRZ-style edge-aware interpolation: flat interiors and straight edges stay bit-exact, diagonal corners get a beveled mix of the two meeting colors (the hand-touched look). The result lands in a fresh single-frame project.", "v4-transform",
+            "session_id" to "string", "factor" to "integer",
+            required = listOf("session_id")) { params, store ->
+            val factor = intParam(params, "factor", 4)
+            val session = sessionOf(params, store)
+            val cel = requireActiveCel(session.project)
+            val scaled = when (factor) {
+                4 -> XbrzScale.xbrz4x(cel)
+                6 -> XbrzScale.xbrz6x(cel)
+                else -> throw IllegalArgumentException("'factor' must be 4 or 6 (was $factor)")
+            }
+            commitNewProject(params, store, "xbrz${factor}x", scaled, paletteOf(session.project))
+        }
+
+        add("frame_edge_smooth", "Hand-crafted anti-aliasing at native resolution: detects 45° staircase corners and lays a single intermediate shade (convex silhouette falloff + concave quarter-tone), exactly like manual pixel-art AA. Straight edges and flat interiors are never touched. Edits the active cel in place.", "v4-transform",
+            "session_id" to "string", "strength" to "number",
+            required = listOf("session_id")) { params, store ->
+            val strength = doubleParam(params, "strength", 0.5)
+            require(strength in 0.0..1.0) { "'strength' must be in [0, 1] (was $strength)" }
+            mutateCel(params, store, "edge-smooth") { EdgeSmoothing.smooth(it, strength) }
+        }
+
+        add("frame_hybrid_scale", "Premium master-grade upscale: xBRZ supersampling followed by box-filter area reduction to the exact factor (1..16) — keeps directional edge detection and adds true sub-pixel coverage. The best deterministic output for final exports. The result lands in a fresh single-frame project.", "v4-transform",
+            "session_id" to "string", "factor" to "integer",
+            required = listOf("session_id")) { params, store ->
+            val factor = intParam(params, "factor", 2)
+            require(factor in 1..16) { "'factor' must be in [1, 16] (was $factor)" }
+            val session = sessionOf(params, store)
+            val cel = requireActiveCel(session.project)
+            val scaled = UpscaleFilter.HYBRID_AA.upscale(cel, factor)
+            commitNewProject(params, store, "hybrid-${factor}x", scaled, paletteOf(session.project))
         }
 
         add("frame_resample", "Resamples the active cel to explicit dimensions with nearest-neighbor or premultiplied box filtering (half-pixel centers); result in a fresh single-frame project.", "v4-transform",

@@ -3,6 +3,7 @@ package com.pixellab.core.export
 import android.graphics.Bitmap
 import com.pixellab.core.convert.ImageData
 import com.pixellab.core.model.PixelFrame
+import com.pixellab.core.transform.UpscaleFilter
 
 /**
  * Boundary bridge between Android [Bitmap]s and the JVM-pure pixel-core
@@ -57,16 +58,30 @@ object BitmapIo {
      *
      * With [scale] `&gt; 1` the base bitmap is upscaled with
      * [Bitmap.createScaledBitmap] using `filter = false`, which keeps the
-     * hard pixel-art edges of integer nearest-neighbor replication.
+     * hard pixel-art edges of integer nearest-neighbor replication. Pass
+     * any other [UpscaleFilter] to upscale through the transform catalogue
+     * instead (xBRZ bevels, hybrid sub-pixel coverage) — the bitmap is then
+     * created directly at the upscaled resolution with no second resample.
      *
      * @param frame raster to render; pixels are packed `0xAARRGGBB`.
      * @param scale integer upscale factor, `1..16`.
+     * @param filter upscale strategy; [UpscaleFilter.NEAREST] (the default)
+     * keeps the historical `createScaledBitmap(filter=false)` semantics.
      * @return a bitmap sized `frame.width * scale x frame.height * scale`.
      * @throws IllegalArgumentException if [scale] is outside `1..16` or the
      * scaled dimensions would exceed the 31-bit Bitmap dimension limit.
      */
-    fun frameToBitmap(frame: PixelFrame, scale: Int = 1): Bitmap {
+    fun frameToBitmap(frame: PixelFrame, scale: Int = 1, filter: UpscaleFilter = UpscaleFilter.NEAREST): Bitmap {
         require(scale in SCALE_RANGE) { "scale must be in 1..16 (was $scale)" }
+        if (scale > 1 && filter != UpscaleFilter.NEAREST) {
+            val upscaled = filter.upscale(frame, scale)
+            return Bitmap.createBitmap(
+                upscaled.pixels,
+                upscaled.width,
+                upscaled.height,
+                Bitmap.Config.ARGB_8888,
+            )
+        }
         val scaledWidth = frame.width.toLong() * scale
         val scaledHeight = frame.height.toLong() * scale
         require(scaledWidth in 1..Int.MAX_VALUE.toLong() && scaledHeight in 1..Int.MAX_VALUE.toLong()) {

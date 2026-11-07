@@ -11,6 +11,7 @@ import com.pixellab.core.model.PixelFrame
 import com.pixellab.core.model.SpriteProject
 import com.pixellab.core.nativelib.NativeGifEncoder
 import com.pixellab.core.nativelib.NativeLib
+import com.pixellab.core.transform.UpscaleFilter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -67,17 +68,34 @@ class Exporter(private val config: PixelLabConfig) {
      * Encodes a single [frame] as a PNG file.
      *
      * @param frame raster to encode; pixels are packed `0xAARRGGBB`.
-     * @param scale integer nearest-neighbor upscale factor, `1..16`.
+     * @param scale integer upscale factor, `1..16`.
+     * @param filter upscale strategy. [UpscaleFilter.NEAREST] (the default)
+     * keeps the historical byte layout; every other filter upscales
+     * through the transform catalogue and encodes with adaptive PNG row
+     * filters.
      * @return PNG bytes (signature, `IHDR`, single `IDAT`, `IEND`).
      * @throws IllegalArgumentException if [scale] is outside `1..16` — thrown
      * synchronously, before the dispatcher switch.
      */
-    suspend fun exportPng(frame: PixelFrame, scale: Int = 1): PixelResult<ByteArray> {
+    suspend fun exportPng(
+        frame: PixelFrame,
+        scale: Int = 1,
+        filter: UpscaleFilter = UpscaleFilter.NEAREST,
+    ): PixelResult<ByteArray> {
         require(scale in scaleRange) { "scale must be in 1..16 (was $scale)" }
         return withContext(Dispatchers.Default) {
-            guarded("PNG export") { PngCodec.encode(frame, scale) }
+            guarded("PNG export") { encodePngBytes(frame, scale, filter) }
         }
     }
+
+    /** PNG encode core: NEAREST takes the byte-stable fast path, anything
+     * else runs the filter cascade and the adaptive-row-filter encoder. */
+    private fun encodePngBytes(frame: PixelFrame, scale: Int, filter: UpscaleFilter): ByteArray =
+        if (filter == UpscaleFilter.NEAREST) {
+            PngCodec.encode(frame, scale)
+        } else {
+            PngCodec.encodeUpscaled(filter.upscale(frame, scale))
+        }
 
     /**
      * Encodes one frame of [project] (all visible layers composited) as a PNG
@@ -95,13 +113,14 @@ class Exporter(private val config: PixelLabConfig) {
         project: SpriteProject,
         frameIndex: Int = project.activeFrameIndex,
         scale: Int = 1,
+        filter: UpscaleFilter = UpscaleFilter.NEAREST,
     ): PixelResult<ByteArray> {
         require(scale in scaleRange) { "scale must be in 1..16 (was $scale)" }
         require(frameIndex in project.frames.indices) {
             "frameIndex $frameIndex out of bounds (project has ${project.frameCount} frames)"
         }
         return withContext(Dispatchers.Default) {
-            guarded("PNG export") { PngCodec.encode(project.compositeFrame(frameIndex), scale) }
+            guarded("PNG export") { encodePngBytes(project.compositeFrame(frameIndex), scale, filter) }
         }
     }
 
@@ -129,6 +148,7 @@ class Exporter(private val config: PixelLabConfig) {
         layout: SpritesheetLayout = SpritesheetLayout.GRID,
         columns: Int = 8,
         margin: Int = 0,
+        filter: UpscaleFilter = UpscaleFilter.NEAREST,
     ): PixelResult<ByteArray> {
         require(scale in scaleRange) { "scale must be in 1..16 (was $scale)" }
         require(columns >= 1) { "columns must be >= 1 (was $columns)" }
@@ -141,8 +161,14 @@ class Exporter(private val config: PixelLabConfig) {
                     layout,
                     columns,
                     margin,
+                    filter,
                 )
-                PngCodec.encode(PixelFrame.of(sheet.width, sheet.height, sheet.pixels))
+                val sheetFrame = PixelFrame.of(sheet.width, sheet.height, sheet.pixels)
+                if (filter == UpscaleFilter.NEAREST) {
+                    PngCodec.encode(sheetFrame)
+                } else {
+                    PngCodec.encodeUpscaled(sheetFrame)
+                }
             }
         }
     }
@@ -174,10 +200,13 @@ class Exporter(private val config: PixelLabConfig) {
         project: SpriteProject,
         loopCount: Int = 0,
         dither: DitherAlgorithm = DitherAlgorithm.FLOYD_STEINBERG,
+        scale: Int = 1,
+        filter: UpscaleFilter = UpscaleFilter.NEAREST,
     ): PixelResult<ByteArray> {
         require(loopCount >= 0) { "loopCount must be >= 0 (was $loopCount)" }
+        require(scale in scaleRange) { "scale must be in 1..16 (was $scale)" }
         return withContext(Dispatchers.Default) {
-            guarded("GIF export") { encodeGifBytes(project, loopCount, dither) }
+            guarded("GIF export") { encodeGifBytes(project, loopCount, dither, scale, filter) }
         }
     }
 
@@ -202,14 +231,18 @@ class Exporter(private val config: PixelLabConfig) {
     suspend fun exportApng(
         project: SpriteProject,
         loopCount: Int = 0,
+        scale: Int = 1,
+        filter: UpscaleFilter = UpscaleFilter.NEAREST,
     ): PixelResult<ByteArray> {
         require(loopCount >= 0) { "loopCount must be >= 0 (was $loopCount)" }
+        require(scale in scaleRange) { "scale must be in 1..16 (was $scale)" }
         return withContext(Dispatchers.Default) {
             guarded("APNG export") {
+                val frames = scaledFrames(compositeFrames(project), scale, filter)
                 ApngEncoder.encode(
-                    project.width,
-                    project.height,
-                    compositeFrames(project),
+                    project.width * scale,
+                    project.height * scale,
+                    frames,
                     frameDurations(project),
                     loopCount,
                 )
@@ -240,10 +273,11 @@ class Exporter(private val config: PixelLabConfig) {
         frame: PixelFrame,
         scale: Int = 1,
         lossless: Boolean = true,
+        filter: UpscaleFilter = UpscaleFilter.NEAREST,
     ): PixelResult<ByteArray> {
         require(scale in scaleRange) { "scale must be in 1..16 (was $scale)" }
         return withContext(Dispatchers.Default) {
-            guarded("WebP export") { encodeWebpBytes(frame, scale, lossless) }
+            guarded("WebP export") { encodeWebpBytes(frame, scale, lossless, filter) }
         }
     }
 
@@ -283,10 +317,14 @@ class Exporter(private val config: PixelLabConfig) {
      * @throws IllegalArgumentException if [scale] is outside `1..16` — thrown
      * synchronously, before the dispatcher switch.
      */
-    suspend fun renderToBitmap(frame: PixelFrame, scale: Int = 1): PixelResult<Bitmap> {
+    suspend fun renderToBitmap(
+        frame: PixelFrame,
+        scale: Int = 1,
+        filter: UpscaleFilter = UpscaleFilter.NEAREST,
+    ): PixelResult<Bitmap> {
         require(scale in scaleRange) { "scale must be in 1..16 (was $scale)" }
         return withContext(Dispatchers.Default) {
-            guarded("Bitmap render") { BitmapIo.frameToBitmap(frame, scale) }
+            guarded("Bitmap render") { BitmapIo.frameToBitmap(frame, scale, filter) }
         }
     }
 
@@ -300,15 +338,17 @@ class Exporter(private val config: PixelLabConfig) {
         project: SpriteProject,
         loopCount: Int,
         dither: DitherAlgorithm,
+        scale: Int,
+        filter: UpscaleFilter,
     ): ByteArray {
-        val frames = compositeFrames(project)
+        val frames = scaledFrames(compositeFrames(project), scale, filter)
         val delays = frameDurations(project)
         if (config.preferNative && NativeLib.load()) {
             val framePixels = Array(frames.size) { frames[it].pixels }
             try {
                 return NativeGifEncoder.encode(
-                    project.width,
-                    project.height,
+                    project.width * scale,
+                    project.height * scale,
                     framePixels,
                     delays.toIntArray(),
                     loopCount,
@@ -321,7 +361,7 @@ class Exporter(private val config: PixelLabConfig) {
                 warnNativeFallback("input rejected", error)
             }
         }
-        return KotlinGifEncoder.encode(project.width, project.height, frames, delays, loopCount)
+        return KotlinGifEncoder.encode(project.width * scale, project.height * scale, frames, delays, loopCount)
     }
 
     /**
@@ -329,8 +369,8 @@ class Exporter(private val config: PixelLabConfig) {
      * requested and supported, otherwise lossy `WEBP` at quality 100. The
      * intermediate bitmap is recycled once compressed.
      */
-    private fun encodeWebpBytes(frame: PixelFrame, scale: Int, lossless: Boolean): ByteArray {
-        val bitmap = BitmapIo.frameToBitmap(frame, scale)
+    private fun encodeWebpBytes(frame: PixelFrame, scale: Int, lossless: Boolean, filter: UpscaleFilter): ByteArray {
+        val bitmap = BitmapIo.frameToBitmap(frame, scale, filter)
         try {
             val format = if (lossless && Build.VERSION.SDK_INT >= webpLosslessMinSdk) {
                 Bitmap.CompressFormat.WEBP_LOSSLESS
@@ -362,6 +402,13 @@ class Exporter(private val config: PixelLabConfig) {
             frames.add(project.compositeFrame(index))
         }
         return frames
+    }
+
+    /** Upscales composited [frames] when a non-trivial scale/filter is
+     * requested; scale 1 (or NEAREST at scale 1) returns the input list. */
+    private fun scaledFrames(frames: List<PixelFrame>, scale: Int, filter: UpscaleFilter): List<PixelFrame> {
+        if (scale == 1) return frames
+        return frames.map { filter.upscale(it, scale) }
     }
 
     /** Effective duration (ms) of every frame of [project], in order. */

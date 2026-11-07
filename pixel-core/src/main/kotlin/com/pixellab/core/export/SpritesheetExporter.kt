@@ -1,6 +1,7 @@
 package com.pixellab.core.export
 
 import com.pixellab.core.model.PixelFrame
+import com.pixellab.core.transform.UpscaleFilter
 
 /**
  * Integer nearest-neighbor upscale shared by the spritesheet and Codex pet
@@ -104,6 +105,9 @@ internal object SpritesheetExporter {
      * the single-row/single-column layouts (`>= 1`).
      * @param margin transparent padding around the frame content inside every
      * cell (`>= 0`).
+     * @param filter upscale strategy for the per-frame scale pass; only
+     * [UpscaleFilter.NEAREST] (the default) keeps the historical
+     * bit-exact duplication semantics.
      * @return the sheet raster and its dimensions.
      * @throws IllegalArgumentException if [frames] is empty, [scale] is below
      * 1, [columns] is below 1, [margin] is negative, or the sheet would
@@ -115,6 +119,7 @@ internal object SpritesheetExporter {
         layout: SpritesheetLayout,
         columns: Int,
         margin: Int,
+        filter: UpscaleFilter = UpscaleFilter.NEAREST,
     ): SheetResult {
         require(frames.isNotEmpty()) { "frames must not be empty" }
         require(scale >= 1) { "scale must be >= 1 (was $scale)" }
@@ -189,7 +194,11 @@ internal object SpritesheetExporter {
                     row = index / columns
                 }
             }
-            val scaled = nearestNeighborScale(frame, scale)
+            val scaled = if (filter == UpscaleFilter.NEAREST) {
+                nearestNeighborScale(frame, scale)
+            } else {
+                filter.upscale(frame, scale)
+            }
             val originX = column * cellW + margin
             val originY = row * cellH + margin
             blit(pixels, width, scaled, originX, originY)
