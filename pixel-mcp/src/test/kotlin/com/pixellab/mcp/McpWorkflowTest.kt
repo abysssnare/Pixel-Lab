@@ -164,8 +164,8 @@ class McpWorkflowTest {
             // 2. Tool catalog includes the heal leg.
             val tools = call(port, token, 2, "tools/list")
             assertEquals(
-                "tools/list count drifted from the documented 187 (docs/MCP-TOOLS.md)",
-                187,
+                "tools/list count drifted from the documented 190 (docs/MCP-TOOLS.md)",
+                190,
                 tools.opt("toolCount", 0),
             )
             val names = (tools.raw("tools") as? com.pixellab.mcp.json.JsonArray)

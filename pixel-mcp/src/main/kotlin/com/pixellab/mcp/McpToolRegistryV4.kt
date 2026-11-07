@@ -266,6 +266,17 @@ class McpToolRegistryV4(private val lab: PixelLab = PixelLab.create()) {
     /** Hex color rendering. */
     private fun hexArgb(argb: Int): String = "#" + "%08x".format(argb)
 
+    /** Parses the v4-voxel depth-mode parameter ('uniform' by default). */
+    private fun voxelModeParam(params: JsonObject): com.pixellab.core.voxel.DepthMode =
+        when (strParam(params, "mode", "uniform")) {
+            "uniform" -> com.pixellab.core.voxel.DepthMode.UNIFORM
+            "luma_relief", "luma-relief", "relief" -> com.pixellab.core.voxel.DepthMode.LUMA_RELIEF
+            "outline" -> com.pixellab.core.voxel.DepthMode.OUTLINE
+            else -> throw IllegalArgumentException(
+                "'mode' must be uniform, luma_relief or outline",
+            )
+        }
+
     private fun hexList(colors: List<Int>): JsonArray = jsonarray {
         for (color in colors) add(JsonString(hexArgb(color)))
     }
@@ -791,6 +802,92 @@ class McpToolRegistryV4(private val lab: PixelLab = PixelLab.create()) {
                 com.pixellab.core.gen.HandDrawnPass.apply(
                     it, seed, clusterScale, clusterTint, brushStrength, strokeWobble,
                 )
+            }
+        }
+
+        // ---- v4-voxel: pixel-art-native 3D --------------------------------
+
+        add("voxel_render_iso", "Voxelizes the active cel and renders it as a pixel-art isometric 3D sprite (2:1 dimetric, fixed camera, voxel AO shading — output stays crisp pixel art, not a smoothed 3D screenshot). Returns the render as an inline PNG plus voxel stats.", "v4-voxel",
+            "session_id" to "string", "depth" to "integer", "mode" to "string", "tile" to "integer", "quarter_turns" to "integer",
+            required = listOf("session_id")) { params, store ->
+            val depth = intParam(params, "depth", 4)
+            val mode = voxelModeParam(params)
+            val tile = intParam(params, "tile", 4)
+            val quarterTurns = intParam(params, "quarter_turns", 0)
+            require(depth in 1..com.pixellab.core.voxel.Voxelizer.MAX_DEPTH) {
+                "'depth' must be in [1, ${com.pixellab.core.voxel.Voxelizer.MAX_DEPTH}] (was $depth)"
+            }
+            require(tile in 1..com.pixellab.core.voxel.VoxelRenderer.MAX_TILE) {
+                "'tile' must be in [1, ${com.pixellab.core.voxel.VoxelRenderer.MAX_TILE}] (was $tile)"
+            }
+            require(quarterTurns in 0..3) { "'quarter_turns' must be in [0, 3] (was $quarterTurns)" }
+            val session = sessionOf(params, store)
+            val cel = requireActiveCel(session.project)
+            val model = com.pixellab.core.voxel.Voxelizer.voxelize(cel, depth, mode)
+            val turned = com.pixellab.core.voxel.VoxelOps.rotateYaw(model, quarterTurns)
+            val render = com.pixellab.core.voxel.VoxelRenderer.renderIsometric(turned, tile)
+            val png = com.pixellab.core.export.PngCodec.encode(render)
+            jsonobj {
+                put("session_id", session.id)
+                put("voxels", num(model.solidCount.toLong()))
+                put("grid", jsonobj {
+                    put("width", num(model.width.toLong()))
+                    put("height", num(model.height.toLong()))
+                    put("depth", num(model.depth.toLong()))
+                })
+                put("render", jsonobj {
+                    put("width", num(render.width.toLong()))
+                    put("height", num(render.height.toLong()))
+                    put("byte_count", num(png.size.toLong()))
+                    putAll(inlineArtifact(png))
+                })
+            }
+        }
+
+        add("voxel_export_obj", "Exports the voxelized active cel as a Wavefront OBJ mesh (exposed faces only, deduplicated corners, y-up right-handed coordinates, per-voxel color comments). Opens in Blender/MagicaVoxel-aware tools.", "v4-voxel",
+            "session_id" to "string", "depth" to "integer", "mode" to "string",
+            required = listOf("session_id")) { params, store ->
+            val depth = intParam(params, "depth", 4)
+            val mode = voxelModeParam(params)
+            require(depth in 1..com.pixellab.core.voxel.Voxelizer.MAX_DEPTH) {
+                "'depth' must be in [1, ${com.pixellab.core.voxel.Voxelizer.MAX_DEPTH}] (was $depth)"
+            }
+            val session = sessionOf(params, store)
+            val cel = requireActiveCel(session.project)
+            val model = com.pixellab.core.voxel.Voxelizer.voxelize(cel, depth, mode)
+            val obj = com.pixellab.core.voxel.VoxelExporter.exportObj(model)
+            jsonobj {
+                put("session_id", session.id)
+                put("voxels", num(model.solidCount.toLong()))
+                put("byte_count", num(obj.size.toLong()))
+                putAll(inlineArtifact(obj))
+            }
+        }
+
+        add("voxel_rotate_gif", "Turntable showcase: renders the voxelized active cel from all four yaw views on a shared centered canvas and encodes a looping GIF89a — a rotating 3D pixel-art sprite.", "v4-voxel",
+            "session_id" to "string", "depth" to "integer", "mode" to "string", "tile" to "integer", "frame_delay_ms" to "integer",
+            required = listOf("session_id")) { params, store ->
+            val depth = intParam(params, "depth", 4)
+            val mode = voxelModeParam(params)
+            val tile = intParam(params, "tile", 4)
+            val frameDelayMs = intParam(params, "frame_delay_ms", 250)
+            require(depth in 1..com.pixellab.core.voxel.Voxelizer.MAX_DEPTH) {
+                "'depth' must be in [1, ${com.pixellab.core.voxel.Voxelizer.MAX_DEPTH}] (was $depth)"
+            }
+            require(tile in 1..com.pixellab.core.voxel.VoxelRenderer.MAX_TILE) {
+                "'tile' must be in [1, ${com.pixellab.core.voxel.VoxelRenderer.MAX_TILE}] (was $tile)"
+            }
+            require(frameDelayMs >= 20) { "'frame_delay_ms' must be >= 20 (was $frameDelayMs)" }
+            val session = sessionOf(params, store)
+            val cel = requireActiveCel(session.project)
+            val model = com.pixellab.core.voxel.Voxelizer.voxelize(cel, depth, mode)
+            val gif = com.pixellab.core.voxel.VoxelExporter.exportRotationGif(model, tile, frameDelayMs)
+            jsonobj {
+                put("session_id", session.id)
+                put("voxels", num(model.solidCount.toLong()))
+                put("frames", num(4))
+                put("byte_count", num(gif.size.toLong()))
+                putAll(inlineArtifact(gif))
             }
         }
 
