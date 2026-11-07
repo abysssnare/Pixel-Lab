@@ -1469,6 +1469,7 @@ class McpToolRegistryV3(private val lab: PixelLab = PixelLab.create()) {
         is com.pixellab.core.pipeline.RecipeStep.DitherStep -> "dither"
         is com.pixellab.core.pipeline.RecipeStep.PaletteMapStep -> "palette-map"
         is com.pixellab.core.pipeline.RecipeStep.OutlineStep -> "outline"
+        is com.pixellab.core.pipeline.RecipeStep.HandDrawnStep -> "hand-drawn"
         is com.pixellab.core.pipeline.RecipeStep.TrimStep -> "trim"
         is com.pixellab.core.pipeline.RecipeStep.PosterizeStep -> "posterize"
         is com.pixellab.core.pipeline.RecipeStep.BgRemoveStep -> "bg-remove"
@@ -1485,6 +1486,8 @@ class McpToolRegistryV3(private val lab: PixelLab = PixelLab.create()) {
             "map to palette ${step.paletteId ?: "(frames' own)"}"
         is com.pixellab.core.pipeline.RecipeStep.OutlineStep ->
             "outline ${hexArgb(step.color)} ${step.mode.name.lowercase()}/${step.connectivity.name.lowercase()}"
+        is com.pixellab.core.pipeline.RecipeStep.HandDrawnStep ->
+            "hand-drawn pass (seed ${step.seed}, tilt ${step.clusterTint}, brush ${step.brushStrength}, wobble ${step.strokeWobble})"
         is com.pixellab.core.pipeline.RecipeStep.TrimStep -> "trim to union content bounds"
         is com.pixellab.core.pipeline.RecipeStep.PosterizeStep -> "posterize to ${step.levels} levels"
         is com.pixellab.core.pipeline.RecipeStep.BgRemoveStep -> "remove background (tolerance ${step.tolerance})"
