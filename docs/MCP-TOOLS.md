@@ -1,10 +1,10 @@
-# MCP Tools — 187 个工具参考（tier 1–6 全量）
+# MCP Tools — 190 个工具参考（tier 1–6 全量）
 
 传输：JSON-RPC 2.0，`GET /sse`（事件流）+ `POST /messages`（请求/响应并镜像至 SSE）；可选 RFC 6455 WebSocket 通道（`start(port, websocketPort)`）。请求体支持 Content-Length 与 chunked。
 会话：`session_id` 参数（缺省自动创建，LRU 32 上限；生成类工具无 `session_id` 时自动新建；id ≤ 128 字符）。
 错误形状：参数错误 `-32602` / 工具崩溃 `isError` / 未知工具 `-32601`。
 图像纪律：导出工具返回 `byte_count` 与摘要，≤ 2MB 时同时内联 `data_b64`（超出则提示改用 session_save / 缩小 scale）；V3 的 io_export_* 同样遵循。
-派发：`McpToolRouter` 层级链（tier 1 canvas/draw/layer/frame/palette/anim/text/template/export/project 58 个 → tier 2 形状/画笔/选区/对称/样式/文字 36 个 → tier 3 io/生成/图集/tilemap/管线 31 个 → tier 4 分析/变换/色彩/矢量 37 个 → tier 5 视觉 11 个 → tier 6 工效学 14 个），`tools/list` 每条带 `tier` 字段。
+派发：`McpToolRouter` 层级链（tier 1 canvas/draw/layer/frame/palette/anim/text/template/export/project 58 个 → tier 2 形状/画笔/选区/对称/样式/文字 36 个 → tier 3 io/生成/图集/tilemap/管线 31 个 → tier 4 分析/变换/色彩/矢量/体素 3D 40 个 → tier 5 视觉 11 个 → tier 6 工效学 14 个），`tools/list` 每条带 `tier` 字段。
 
 ## 画布尺寸纪律
 
@@ -141,7 +141,7 @@ V3 注册表与 V1/V2 并列挂载（`McpToolRegistryV3(lab)`），新增 `trans
 
 `pipeline_run`(recipe_json) → 步骤顺序执行（scale/quantize/dither/palette-map/outline/trim/posterize/bg-remove） · `pipeline_recipe_validate`(recipe_json) → 步骤摘要（纯校验）
 
-## V4（37 个）— 第 4 轮能力（分析 / 变换 / 世界生成 / 色彩科学 / 矢量 + 边缘精致三件套）
+## V4（40 个）— 第 4 轮能力（分析 / 变换 / 世界生成 / 色彩科学 / 矢量 / 体素 3D + 边缘精致三件套）
 
 ### v4-analysis（11）
 
@@ -163,7 +163,12 @@ V3 注册表与 V1/V2 并列挂载（`McpToolRegistryV3(lab)`），新增 `trans
 
 `frame_contours`(session_id, color, tolerance, simplify) → 走廊格轮廓环（洞标记 + path 字符串） · `export_svg`(session_id, mode[runs/outline], title) → 静态 SVG（每色一 path，b64 返回） · `export_svg_animated`(session_id, frame_duration_ms, loop, title) → SMIL 动画 SVG（每帧一个 g + 离散 opacity 驱动）
 
-**累计：162 个 MCP 工具**（v1 58 + v2 36 + v3 31 + v4 37）。
+### v4-voxel（3）— 像素艺术原生 3D
+
+`voxel_render_iso`(session_id, depth? 1..32, mode? [uniform/luma_relief/outline], tile? 1..64, quarter_turns? 0..3) → 体素化当前帧并等距 2:1 渲染（固定相机 + 体素 AO 四级角落遮蔽 + 三面明暗），输出仍是锐利像素艺术而非平滑 3D 截图；返回内联 PNG + 体素统计 · `voxel_export_obj`(session_id, depth?, mode?) → Wavefront OBJ 网格（仅暴露面、顶点去重、y-up 右手系、逐体素颜色注释，Blender 可开） · `voxel_rotate_gif`(session_id, depth?, mode?, tile?, frame_delay_ms? ≥20) → 四视角转台 GIF89a（共享居中画布，原地旋转不抖动）
+
+
+**累计：165 个 MCP 工具**（v1 58 + v2 36 + v3 31 + v4 40）。
 
 ## V5（11 个）— Agent 视觉（第 5 轮：让 Agent 看见画布）
 
@@ -181,7 +186,7 @@ V3 注册表与 V1/V2 并列挂载（`McpToolRegistryV3(lab)`），新增 `trans
 
 `canvas_structure`(session_id, connectivity[four/eight], max_blobs) → 连通区域解读（面积/外接框/主色/洞/贴边/填充比/形状判词"实心块/环形/细轮廓"）+ 宏观占用指纹格 · `canvas_symmetry`(session_id, tolerance 0..255) → 水平/垂直/180°/对角对称探针（逐轴 holds + 失配对数） · `canvas_diff`(session_id, mode[last_op/frames/sessions], frame_a, frame_b, other_session_id) → 差异报告（+增/-删/~改色像素数、各类包围框、色变迁移表、一句总结；last_op 对比最近一次操作前快照，引擎 peekBefore 非变异读取）
 
-**累计：173 个 MCP 工具**（v1 58 + v2 36 + v3 31 + v4 37 + v5 11）。
+**累计：176 个 MCP 工具**（v1 58 + v2 36 + v3 31 + v4 40 + v5 11）。
 
 ### 本轮契约修复（Agent 可理解性）
 
@@ -215,4 +220,4 @@ V3 注册表与 V1/V2 并列挂载（`McpToolRegistryV3(lab)`），新增 `trans
 
 `sketch_draw`(session_id, sketch, x?, y?, frame_index?) → 把 canvas_read(format="sketch") / canvas_legend 的文本**画回会话**：图例行 `C=#RRGGBB|#AARRGGBB`、`---` 分隔、字符格（'.' 透明）。解析后的非透明格盖印到指定帧（默认 active）的活动 cel；x/y ≥ 0，越界格裁剪并以 placed/clipped 计数返回，另附 parsed {width,height,points} 与 projectSummary。读 → 改文本 → 画回，视觉闭环落地。
 
-**累计：187 个 MCP 工具**（v1 58 + v2 36 + v3 31 + v4 37 + v5 11 + v6 14）。
+**累计：190 个 MCP 工具**（v1 58 + v2 36 + v3 31 + v4 40 + v5 11 + v6 14）。

@@ -43,6 +43,7 @@ import com.pixellab.core.PixelLab
 import com.pixellab.core.model.SpriteProject
 import com.pixellab.core.store.ProjectStore
 import com.pixellab.ui.PixelEditorScaffold
+import com.pixellab.ui.VoxelPreviewPanel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -104,6 +105,10 @@ fun EditorScreen(
 ) {
     var loadError by remember(projectId) { mutableStateOf<String?>(null) }
     var project by remember(projectId) { mutableStateOf<SpriteProject?>(null) }
+
+    // Interactive voxel 3D preview of the current frame (see the "3D"
+    // top-bar button).
+    var voxelPreviewOpen by remember(projectId) { mutableStateOf(false) }
 
     // Saveable rather than plain remember: rotation is already covered by
     // the manifest's configChanges (the composition survives), and for the
@@ -257,6 +262,16 @@ fun EditorScreen(
                                 fontSize = 16.sp,
                             )
                             Spacer(modifier = Modifier.weight(1f))
+                            // 3D preview entry: voxelizes the current frame
+                            // and shows the interactive isometric render
+                            // (drag to rotate, zoom/depth/mode controls).
+                            TextButton(
+                                onClick = { voxelPreviewOpen = true },
+                                enabled = !exporting,
+                            ) {
+                                Text(text = "3D")
+                            }
+                            Spacer(modifier = Modifier.width(BarSpacing))
                             // Export entry: gallery documents previously had
                             // NO export path at all — only the v1 demo's
                             // in-memory document could export. Same menu and
@@ -330,6 +345,24 @@ fun EditorScreen(
                     },
                 ) {
                     Text(text = "Leave")
+                }
+            },
+        )
+    }
+
+    if (voxelPreviewOpen && project != null) {
+        val previewProject = project
+        AlertDialog(
+            onDismissRequest = { voxelPreviewOpen = false },
+            title = { Text(text = "3D — ${previewProject.name}") },
+            text = {
+                VoxelPreviewPanel(
+                    frame = previewProject.compositeFrame(previewProject.activeFrameIndex),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { voxelPreviewOpen = false }) {
+                    Text(text = "Close")
                 }
             },
         )

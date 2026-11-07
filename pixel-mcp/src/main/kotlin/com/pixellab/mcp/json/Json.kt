@@ -206,6 +206,12 @@ class MutableJsonObject internal constructor() {
         return this
     }
 
+    /** Copies every entry of [other] into this builder (later keys win). */
+    fun putAll(other: JsonObject): MutableJsonObject {
+        for ((k, v) in other.entries) map[k] = v
+        return this
+    }
+
     /** Freezes the accumulated entries into an immutable [JsonObject]. */
     fun build(): JsonObject = JsonObject(LinkedHashMap(map))
 }
