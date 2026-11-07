@@ -6,7 +6,7 @@ import org.junit.Test
 class VoxelPanelLogicTest {
 
     @Test
-    fun `wrapTurns keeps the index in 0..3`() {
+    fun `wrapTurns keeps the index in range`() {
         assertEquals(0, VoxelPanelLogic.wrapTurns(0))
         assertEquals(1, VoxelPanelLogic.wrapTurns(5))
         assertEquals(3, VoxelPanelLogic.wrapTurns(-1))
@@ -37,7 +37,7 @@ class VoxelPanelLogicTest {
     }
 
     @Test
-    fun `tile zoom is clamped`() {
+    fun `tile zoom is clamped to bounds`() {
         assertEquals(2, VoxelPanelLogic.clampTile(0))
         assertEquals(2, VoxelPanelLogic.clampTile(1))
         assertEquals(8, VoxelPanelLogic.clampTile(8))
