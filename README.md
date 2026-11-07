@@ -8,10 +8,18 @@
 
 | 模块 | 定位 | 关键能力 |
 |:---|:---|:---|
-| `pixel-core` | 主战场 | 数据模型（PixelFrame/SpriteProject）、绘制引擎+撤销栈、动画引擎、模板/字体、量化/抖动/转换管线、PNG/GIF/APNG/精灵表/Codex 宠物包导出、C++/NDK 热路径 |
-| `pixel-ui-compose` | Compose 原子组件 | PixelCanvas（缩放/平移/笔画预览/洋葱皮/网格）、PalettePanel、TimelineStrip、LayerPanel |
-| `pixel-mcp` | MCP 服务器 | JSON-RPC 2.0 over SSE + 可选 WebSocket、六层注册表 183 工具（tier-chain 路由）、会话存储、零外部依赖（手写 HTTP/SSE/WS/JSON） |
-| `sample-app` | 演示 | 单 Activity 全功能画板 + Agent 指令行 + 四格式导出 |
+| `pixel-core` | 主战场 | 数据模型（PixelFrame/SpriteProject）、绘制引擎+撤销栈、动画引擎、模板/字体、量化/抖动/转换管线、PNG/GIF/APNG/精灵表/Codex 宠物包导出、顶尖输出工艺（xBRZ 混合放大/手工 AA/自适应行滤镜）、去 AI 感手绘 pass、体素 3D（等距渲染/OBJ/转台 GIF）、C++/NDK 热路径 |
+| `pixel-ui-compose` | Compose 原子组件 | PixelCanvas（缩放/平移/笔画预览/洋葱皮/网格）、PalettePanel、TimelineStrip、LayerPanel、VoxelPreviewPanel（交互式 3D 预览） |
+| `pixel-mcp` | MCP 服务器 | JSON-RPC 2.0 over SSE + 可选 WebSocket、六层注册表 190 工具（tier-chain 路由）、会话存储、零外部依赖（手写 HTTP/SSE/WS/JSON） |
+| `sample-app` | 演示 | 单 Activity 全功能画板 + Agent 指令行 + 四格式导出 + 3D 预览入口 |
+
+## 顶尖输出工艺（2026-11 三连升级）
+
+**边缘精致**：[XbrzScale](pixel-core/src/main/kotlin/com/pixellab/core/transform/XbrzScale.kt) 以 xBRZ 式边缘感知插值放大（4x/6x）——平坦与直线 bit-exact，斜角以两原色的千分比阶梯倒角，透明边缘获得 alpha 衰减；[EdgeSmoothing](pixel-core/src/main/kotlin/com/pixellab/core/transform/EdgeSmoothing.kt) 在原生分辨率做手工 AA（45° 阶梯拐角单阶中间色，直线与平坦区永不触碰）；[UpscaleFilter](pixel-core/src/main/kotlin/com/pixellab/core/transform/UpscaleFilter.kt) 把全部变换算法目录统一路由到任意 1..16 倍导出（HYBRID_AA = xBRZ 超采样 + 面积归约，亚像素覆盖），PNG 导出带自适应行滤镜（平滑渐变压缩 ~4.5x）。
+
+**去 AI 感**：[HandDrawnPass](pixel-core/src/main/kotlin/com/pixellab/core/gen/HandDrawnPass.kt) 在生成图上叠加人类痕迹——Voronoi 簇明度偏移（颜料色块感）、双八度值噪声笔触斑纹（干笔触）、轮廓粗细抖动（手绘线条永不均匀）；确定性种子驱动，直连 Recipe 管线与 MCP。
+
+**体素 3D**：[voxel 包](pixel-core/src/main/kotlin/com/pixellab/core/voxel/) 把精灵挤压成立体（均匀/亮度浮雕/轮廓骨架三种深度策略），软件等距 2:1 渲染器输出仍是锐利像素艺术（固定相机 + 0fps 体素 AO + 三面明暗，侧面解析式光栅化与顶面菱形无缝共享斜边），OBJ 网格导出（仅暴露面/顶点去重/y-up，Blender 可开），四视角转台 GIF；UI 层 VoxelPreviewPanel 拖动旋转/缩放/深度/模式交互式预览。
 
 ## 快速开始
 
@@ -60,7 +68,7 @@ Kotlin 2.3.21 · AGP 8.13.2 · Gradle 8.14.6 · compileSdk 36 · minSdk 26 · JD
 
 ## 验证状态
 
-- 全模块 kotlinc 2.3.21 编译 0 error（CI 含 pixel-mcp JVM 门禁；升级前本地预验证 432/432 测试全绿）
+- 全模块 kotlinc 2.3.21 编译 0 error（CI 含 pixel-mcp JVM 门禁；本地预验证 498/498 测试全绿）
 - C++ 全文件 g++ `-Wall -Wextra` 语法干净 + ASan/UBSan 行为冒烟全绿（量化 3 算法确定性/抖动 7 核/洪泛/合成/LZW 回环/GIF 结构）
 - GIF/PNG/APNG 编码经 JDK ImageIO / 独立解码器像素级验证
 - MCP 服务器真实端口冒烟：initialize → tools/list → tools/call → SSE 事件流 + **WebSocket（RFC 6455 握手/掩码/分片/ping/close 1002 活体测试）**
@@ -103,7 +111,10 @@ Kotlin 2.3.21 · AGP 8.13.2 · Gradle 8.14.6 · compileSdk 36 · minSdk 26 · JD
 | PR #56 | **传输层加固**：Bearer token 准入（401/415/411——封死 loopback 共享与 text/plain CSRF）、8MB 增量请求体、JSON 200K 节点预算、SSE 有界队列写（慢客户端断开而非挂死服务器）、专用 accept 线程 + 128 连接上限、WS 握手期上限、RFC 9112 严格化（行内 CR 走私/trailer 上限/请求行校验） | +621 行 |
 | PR #67 | 快捷键焦点根/IME insets/每文档面板状态/画廊导出路径/无障碍与 IO 卫生 | — |
 | **2026-11** | **工具链升级**：Kotlin 2.0.21→2.3.21、AGP 8.7.3→8.13.2、Gradle 8.10.2→8.14.6（wrapper 单一事实源）、Compose BOM 2024.12.01→2026.02.00、compileSdk/targetSdk 35→36、coroutines 1.9.0→1.10.2、JDK 17→21、NDK r27→r30、CMake 3.22.1→3.31.6；kotlinOptions→compilerOptions DSL；移除未使用的 serialization/ktor/mcp-sdk/slf4j 目录 pin；与宿主 Android-Guru-Agent 栈精确对齐；CI 增 wrapper 校验 | — |
-| **合计** | | **59,500+ 行**（Kotlin 57,400+ + C++ 2,132+），**183 个 MCP 工具**，**432 项单测**（CI 含 Gradle+NDK 全量构建、kotlinc JVM 门、C++ -Wall -Wextra 语法门、结构质量门） |
+| PR #69 | **边缘精致**：XbrzScale（xBRZ 式边缘感知混合放大 4x/6x）+ EdgeSmoothing（手工 AA pass）+ UpscaleFilter 统一路由（含 HYBRID_AA 母带级放大）+ 导出全链滤镜接入 + PNG 自适应行滤镜 + MCP frame_xbrz/frame_edge_smooth/frame_hybrid_scale | +2,300 行 |
+| PR #70 | **去 AI 感**：HandDrawnPass（Voronoi 簇明度偏移 + 笔触斑纹 + 轮廓粗细抖动）+ Recipe hand-drawn 步骤 + MCP hand_drawn_pass | +530 行 |
+| PR #71 | **体素 3D**：VoxelModel/Voxelizer（三种深度策略）+ VoxelOps（90° 数据旋转）+ VoxelRenderer（等距 2:1 软渲染 + 体素 AO + 无缝侧面光栅化）+ VoxelExporter（OBJ/转台 GIF）+ VoxelPreviewPanel 交互式 3D 预览 + sample-app 3D 入口 + MCP v4-voxel 三工具 | +1,750 行 |
+| **合计** | | **61,800+ 行**（Kotlin 59,700+ + C++ 2,132+），**190 个 MCP 工具**，**498 项单测**（CI 含 Gradle+NDK 全量构建、kotlinc JVM 门、C++ -Wall -Wextra 语法门、结构质量门；本轮新增边缘精致/去 AI 感/体素 3D 三大特性各带独立测试套） |
 
 任务看板：https://github.com/users/AceGuru-mjh/projects/5
 

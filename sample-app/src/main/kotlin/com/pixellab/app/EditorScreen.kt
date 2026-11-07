@@ -350,21 +350,23 @@ fun EditorScreen(
         )
     }
 
-    if (voxelPreviewOpen && project != null) {
+    if (voxelPreviewOpen) {
         val previewProject = project
-        AlertDialog(
-            onDismissRequest = { voxelPreviewOpen = false },
-            title = { Text(text = "3D — ${previewProject.name}") },
-            text = {
-                VoxelPreviewPanel(
-                    frame = previewProject.compositeFrame(previewProject.activeFrameIndex),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { voxelPreviewOpen = false }) {
-                    Text(text = "Close")
-                }
-            },
-        )
+        if (previewProject != null) {
+            AlertDialog(
+                onDismissRequest = { voxelPreviewOpen = false },
+                title = { Text(text = "3D — ${previewProject.name}") },
+                text = {
+                    VoxelPreviewPanel(
+                        frame = previewProject.compositeFrame(previewProject.activeFrameIndex),
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { voxelPreviewOpen = false }) {
+                        Text(text = "Close")
+                    }
+                },
+            )
+        }
     }
 }
