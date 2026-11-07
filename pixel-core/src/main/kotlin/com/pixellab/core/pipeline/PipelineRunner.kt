@@ -9,6 +9,7 @@ import com.pixellab.core.palette.BuiltInPalettes
 import com.pixellab.core.palette.LabColor
 import com.pixellab.core.tools.OutlineShading
 import com.pixellab.core.tools.TransformOps
+import com.pixellab.core.transform.UpscaleFilter
 
 /**
  * Executes a [Recipe] over a list of [PixelFrame]s — the bridge between the
@@ -79,7 +80,13 @@ object PipelineRunner {
 
     /** Dispatches one step over the whole frame list. */
     private fun applyStep(step: RecipeStep, frames: List<PixelFrame>): List<PixelFrame> = when (step) {
-        is RecipeStep.ScaleStep -> frames.map { TransformOps.scaleNearest(it, step.factor) }
+        is RecipeStep.ScaleStep -> frames.map {
+            if (step.filter == UpscaleFilter.NEAREST) {
+                TransformOps.scaleNearest(it, step.factor)
+            } else {
+                step.filter.upscale(it, step.factor)
+            }
+        }
         is RecipeStep.QuantizeStep -> quantize(frames, step)
         is RecipeStep.DitherStep -> dither(frames, step)
         is RecipeStep.PaletteMapStep -> paletteMap(frames, step)

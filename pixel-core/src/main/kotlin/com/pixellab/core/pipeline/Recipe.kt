@@ -4,6 +4,7 @@ import com.pixellab.core.convert.DitherAlgorithm
 import com.pixellab.core.convert.QuantizeAlgorithm
 import com.pixellab.core.tools.Connectivity
 import com.pixellab.core.tools.OutlineMode
+import com.pixellab.core.transform.UpscaleFilter
 
 /**
  * One stage of a processing [Recipe]. Steps are immutable value objects —
@@ -17,8 +18,17 @@ import com.pixellab.core.tools.OutlineMode
  */
 sealed class RecipeStep {
 
-    /** Nearest-neighbor integer upscale by [factor] (canvas grows `factor`x). */
-    data class ScaleStep(val factor: Int) : RecipeStep() {
+    /**
+     * Integer upscale by [factor] (canvas grows `factor`x). [filter]
+     * selects the upscale strategy — [UpscaleFilter.NEAREST] (the default,
+     * and the only historical behavior) keeps bit-exact duplication;
+     * every other entry routes through the transform catalogue (xBRZ
+     * bevels, hybrid sub-pixel coverage and friends).
+     */
+    data class ScaleStep(
+        val factor: Int,
+        val filter: UpscaleFilter = UpscaleFilter.NEAREST,
+    ) : RecipeStep() {
         init {
             // 1..16 mirrors every other upscale surface (v2 transform_scale,
             // v4 exporters): pipeline scale was the only path with no cap —
@@ -245,8 +255,11 @@ object RecipeParser {
         val allowed = ArrayList<String>()
         val step: RecipeStep = when (type) {
             "scale" -> {
-                allowed += listOf("type", "factor")
-                RecipeStep.ScaleStep(factor = requireInt("factor"))
+                allowed += listOf("type", "factor", "filter")
+                RecipeStep.ScaleStep(
+                    factor = requireInt("factor"),
+                    filter = parseUpscaleFilter(optionalString("filter"), obj),
+                )
             }
             "quantize" -> {
                 allowed += listOf("type", "algorithm", "maxColors")
@@ -318,6 +331,20 @@ object RecipeParser {
             else -> throw IllegalArgumentException("${obj.where()}: '$field' must be a string or null")
         }
     }
+
+    private fun parseUpscaleFilter(raw: String?, obj: JObject): UpscaleFilter =
+        when (normalize(raw ?: "nearest")) {
+            "nearest", "nn" -> UpscaleFilter.NEAREST
+            "scale2x" -> UpscaleFilter.SCALE2X
+            "scale3x" -> UpscaleFilter.SCALE3X
+            "epx2x" -> UpscaleFilter.EPX2X
+            "epx3x" -> UpscaleFilter.EPX3X
+            "xbr2x" -> UpscaleFilter.XBR2X
+            "xbrz4x" -> UpscaleFilter.XBRZ4X
+            "xbrz6x" -> UpscaleFilter.XBRZ6X
+            "hybrid", "hybridaa", "hybrid_aa" -> UpscaleFilter.HYBRID_AA
+            else -> throw IllegalArgumentException("${obj.where()}: unknown upscale filter '$raw'")
+        }
 
     private fun parseQuantizeAlgorithm(raw: String, obj: JObject): QuantizeAlgorithm =
         when (normalize(raw)) {
