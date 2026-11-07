@@ -775,6 +775,25 @@ class McpToolRegistryV4(private val lab: PixelLab = PixelLab.create()) {
             mutateCel(params, store, "edge-smooth") { EdgeSmoothing.smooth(it, strength) }
         }
 
+        add("hand_drawn_pass", "The de-AI pass: layers hand-made traces over generated art — organic Voronoi cluster tinting (paint patches), value-noise brush mottling and outline thickening wobble. Procedural cleanliness disappears; the result reads as drawn by a human. Deterministic per seed. Edits the active cel in place.", "v4-transform",
+            "session_id" to "string", "seed" to "integer", "cluster_scale" to "number", "cluster_tint" to "number", "brush_strength" to "number", "stroke_wobble" to "number",
+            required = listOf("session_id")) { params, store ->
+            val seed = intParam(params, "seed", 0).toLong()
+            val clusterScale = doubleParam(params, "cluster_scale", 8.0)
+            val clusterTint = doubleParam(params, "cluster_tint", 0.10)
+            val brushStrength = doubleParam(params, "brush_strength", 0.06)
+            val strokeWobble = doubleParam(params, "stroke_wobble", 0.0)
+            require(clusterScale in 4.0..64.0) { "'cluster_scale' must be in [4, 64] (was $clusterScale)" }
+            require(clusterTint in 0.0..0.25) { "'cluster_tint' must be in [0, 0.25] (was $clusterTint)" }
+            require(brushStrength in 0.0..0.25) { "'brush_strength' must be in [0, 0.25] (was $brushStrength)" }
+            require(strokeWobble in 0.0..0.5) { "'stroke_wobble' must be in [0, 0.5] (was $strokeWobble)" }
+            mutateCel(params, store, "hand-drawn") {
+                com.pixellab.core.gen.HandDrawnPass.apply(
+                    it, seed, clusterScale, clusterTint, brushStrength, strokeWobble,
+                )
+            }
+        }
+
         add("frame_hybrid_scale", "Premium master-grade upscale: xBRZ supersampling followed by box-filter area reduction to the exact factor (1..16) — keeps directional edge detection and adds true sub-pixel coverage. The best deterministic output for final exports. The result lands in a fresh single-frame project.", "v4-transform",
             "session_id" to "string", "factor" to "integer",
             required = listOf("session_id")) { params, store ->

@@ -4,6 +4,7 @@ import com.pixellab.core.PixelErrorKind
 import com.pixellab.core.PixelResult
 import com.pixellab.core.convert.Ditherer
 import com.pixellab.core.convert.Quantizer
+import com.pixellab.core.gen.HandDrawnPass
 import com.pixellab.core.model.PixelFrame
 import com.pixellab.core.palette.BuiltInPalettes
 import com.pixellab.core.palette.LabColor
@@ -92,6 +93,16 @@ object PipelineRunner {
         is RecipeStep.PaletteMapStep -> paletteMap(frames, step)
         is RecipeStep.OutlineStep ->
             frames.map { OutlineShading.outline(it, step.color, step.mode, step.connectivity) }
+        is RecipeStep.HandDrawnStep -> frames.map {
+            HandDrawnPass.apply(
+                it,
+                seed = step.seed,
+                clusterScale = step.clusterScale,
+                clusterTint = step.clusterTint,
+                brushStrength = step.brushStrength,
+                strokeWobble = step.strokeWobble,
+            )
+        }
         is RecipeStep.TrimStep -> trim(frames)
         is RecipeStep.PosterizeStep -> frames.map { posterize(it, step.levels) }
         is RecipeStep.BgRemoveStep -> frames.map { removeBackground(it, step.tolerance) }

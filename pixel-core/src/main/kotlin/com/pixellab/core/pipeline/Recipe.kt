@@ -2,6 +2,7 @@ package com.pixellab.core.pipeline
 
 import com.pixellab.core.convert.DitherAlgorithm
 import com.pixellab.core.convert.QuantizeAlgorithm
+import com.pixellab.core.gen.HandDrawnPass
 import com.pixellab.core.tools.Connectivity
 import com.pixellab.core.tools.OutlineMode
 import com.pixellab.core.transform.UpscaleFilter
@@ -86,6 +87,27 @@ sealed class RecipeStep {
         val mode: OutlineMode = OutlineMode.OUTER,
         val connectivity: Connectivity = Connectivity.EIGHT,
     ) : RecipeStep()
+
+    /**
+     * The "de-AI" pass: [HandDrawnPass] layered over every frame — organic
+     * cluster tinting, brush mottling and outline wobble that make
+     * generated art read as hand-made. See [HandDrawnPass] for parameter
+     * semantics; every parameter keeps its default there.
+     */
+    data class HandDrawnStep(
+        val seed: Long = 0,
+        val clusterScale: Double = 8.0,
+        val clusterTint: Double = 0.10,
+        val brushStrength: Double = 0.06,
+        val strokeWobble: Double = 0.0,
+    ) : RecipeStep() {
+        init {
+            require(clusterScale in 4.0..64.0) { "clusterScale must be in [4, 64] (was $clusterScale)" }
+            require(clusterTint in 0.0..0.25) { "clusterTint must be in [0, 0.25] (was $clusterTint)" }
+            require(brushStrength in 0.0..0.25) { "brushStrength must be in [0, 0.25] (was $brushStrength)" }
+            require(strokeWobble in 0.0..0.5) { "strokeWobble must be in [0, 0.5] (was $strokeWobble)" }
+        }
+    }
 
     /**
      * Crop every frame to the bounding box of the non-transparent content.
@@ -298,6 +320,16 @@ object RecipeParser {
                     }, obj),
                     mode = parseMode(optionalString("mode"), obj),
                     connectivity = parseConnectivity(optionalString("connectivity"), obj),
+                )
+            }
+            "hand-drawn" -> {
+                allowed += listOf("type", "seed", "cluster_scale", "cluster_tint", "brush_strength", "stroke_wobble")
+                RecipeStep.HandDrawnStep(
+                    seed = optionalInt("seed")?.toLong() ?: 0L,
+                    clusterScale = optionalFloat("cluster_scale")?.toDouble() ?: 8.0,
+                    clusterTint = optionalFloat("cluster_tint")?.toDouble() ?: 0.10,
+                    brushStrength = optionalFloat("brush_strength")?.toDouble() ?: 0.06,
+                    strokeWobble = optionalFloat("stroke_wobble")?.toDouble() ?: 0.0,
                 )
             }
             "trim" -> {
